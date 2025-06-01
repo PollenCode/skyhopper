@@ -2,7 +2,7 @@ import os
 import random
 import sys
 import time
-# import cv2
+import cv2
 import threading
 import crypt
 import hashlib
@@ -44,6 +44,9 @@ class SkyHopperDevice:
         self.remote = remote
         # self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.update_current_port()
+
+        if is_sender:
+            self.stream = cv2.VideoCapture(0)
 
     def get_freq_idx(self):
         frame_idx = self.get_time() // self.interval
@@ -125,18 +128,23 @@ class SkyHopperDevice:
             i += 1
             if i % 20 == 2 and self.sock is not None and self.is_sender:
                 message = "message" + str(random.randint(100, 999))
+                ret, frame = self.stream.read()
+                print("Frame", ret, frame)
+                        
+
                 print("Send", message)
                 self.sock.sendto(message.encode(), (self.remote, self.current_port))
 
             # print("data", data)
 
-            time.sleep(0.1)
+            time.sleep(0.01)
 
 
 
-inst = SkyHopperDevice(bytes([1,2,3]), is_sender=(sys.argv[1] == "sender"), remote="192.168.50.243")
+inst = SkyHopperDevice(bytes([1,2,3]), is_sender=(sys.argv[1] == "sender"), remote="172.31.70.33")
 # inst.sync_time()
-inst.simple_sync_remote()
+if inst.is_sender:
+    inst.simple_sync_remote()
 inst.loop()
 
 
