@@ -91,6 +91,9 @@ class SkyHopperDevice:
         except socket.error as ex:
             # print("Receive error: ", type(ex), ex)
             return None
+        
+    def handle_message(self, message: bytes):
+        print("Received", message)
 
     def loop(self):
         
@@ -104,7 +107,7 @@ class SkyHopperDevice:
             if not self.is_sender:
                 data = self.receive_data()
                 if data is not None:
-                    print("Received", data)
+                    self.handle_message(data)
 
             i += 1
             if i % 20 == 2 and self.sock is not None and self.is_sender:
