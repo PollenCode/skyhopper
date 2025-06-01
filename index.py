@@ -28,19 +28,19 @@ class SkyHopperDevice:
 
     current_port = 0
 
+    
+
     # 2.4 WiFi
     # 2.4 Bluetooth
     # LoRa
 
-    def __init__(self, key: bytes):
+    def __init__(self, key: bytes, is_sender: bool):
         self.key = key
-        self.channel_count = 3
+        self.channel_count = 1000
         self.current_freq = 0
         self.interval = 1
         self.sock = None
-
-
-
+        self.is_sender = is_sender
 
     def get_freq_idx(self):
         frame_idx = self.get_time() // self.interval
@@ -72,23 +72,17 @@ class SkyHopperDevice:
         
         print("Change port", port)
 
+        
         if self.sock is not None:
             self.sock.close()
             self.sock = None
 
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.sock.bind(('',port))
-        self.sock.setblocking(False)
+        if not self.is_sender:
+            self.sock.bind(('',port))
+            self.sock.setblocking(False)
 
         self.current_port = port
-
-    def send_message(self, b: bytes):
-        buf = bytes(64) 
-
-
-        
-
-        pass
 
     def receive_data(self) -> bytes | None:
         try:
@@ -107,23 +101,24 @@ class SkyHopperDevice:
 
             self.set_socket_port(port)
 
-            data = self.receive_data()
-            if data is not None:
-                print("Received", data)
+            if not self.is_sender:
+                data = self.receive_data()
+                if data is not None:
+                    print("Received", data)
 
             i += 1
-            if i % 5 == 2 and self.sock is not None and sys.argv[1] == "sender":
+            if i % 20 == 2 and self.sock is not None and self.is_sender:
                 print("Send")
                 message = "message" + str(random.randint(100, 999))
                 self.sock.sendto(message.encode(), (LOCALHOST, port))
 
             # print("data", data)
 
-            time.sleep(1)
+            time.sleep(0.1)
 
 
 
-inst = SkyHopperDevice(bytes([1,2,3]))
+inst = SkyHopperDevice(bytes([1,2,3]), is_sender=(sys.argv[1] == "sender"))
 inst.sync_time()
 inst.loop()
 
