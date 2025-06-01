@@ -95,7 +95,7 @@ class SkyHopperDevice:
 
     def receive_data(self) -> bytes | None:
         try:
-            data, address = self.sock.recvfrom(30000)
+            data, address = self.sock.recvfrom(50000)
             return data
         except socket.error as ex:
             # print("Receive error: ", type(ex), ex)
@@ -106,7 +106,30 @@ class SkyHopperDevice:
             print("Sync time")
             self.sync_time()
         else:
-            print("Received unknown message", message)
+            if not self.is_sender:
+                colors = list(message)
+                # print("Received pixels", len(colors))
+
+                # color = np.random.randint(0, 256, size=(64*64*3), dtype=np.uint8)
+                img_rgb = np.array(colors, dtype=np.uint8).reshape((128, 128, 3))
+
+                # print(colors)
+
+                # Convert RGB to BGR for OpenCV
+                img_rgb = cv2.resize(img_rgb, (1000, 1000), interpolation=cv2.INTER_NEAREST)
+
+                # img_rgb = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2GRAY)
+                img_rgb = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2BGR)
+
+
+                img_rgb = cv2.rotate(img_rgb, cv2.ROTATE_90_CLOCKWISE)
+
+                # img_rgb = np.array(colors).reshape((64, 64, 3))
+                cv2.imshow("Picamera2 Frame", img_rgb)
+                cv2.waitKey(1) 
+                
+            else:
+                print("Received unknown message", message)
 
     def simple_sync_remote(self):
         self.sock.sendto(bytes([99]), (self.remote, self.current_port))
