@@ -4,10 +4,11 @@ import sys
 import time
 import cv2
 import threading
-import crypt
 import hashlib
 import struct
 import socket
+from picamera2 import Picamera2
+import numpy as np
 
 # image = cv2.imread("image.jpg")
 
@@ -46,7 +47,9 @@ class SkyHopperDevice:
         self.update_current_port()
 
         if is_sender:
-            self.stream = cv2.VideoCapture(0)
+            self.picam2 = Picamera2()
+            self.picam2.configure(self.picam2.create_preview_configuration(main={"format": 'RGB888', "size": (128,128)}))
+            self.picam2.start()
 
     def get_freq_idx(self):
         frame_idx = self.get_time() // self.interval
@@ -77,7 +80,7 @@ class SkyHopperDevice:
         if self.current_port == port:
             return
         
-        print("Change port", port)
+        print("Change frequency", port)
         
         if self.sock is not None:
             self.sock.close()
@@ -92,7 +95,7 @@ class SkyHopperDevice:
 
     def receive_data(self) -> bytes | None:
         try:
-            data, address = self.sock.recvfrom(10000)
+            data, address = self.sock.recvfrom(30000)
             return data
         except socket.error as ex:
             # print("Receive error: ", type(ex), ex)
@@ -126,14 +129,21 @@ class SkyHopperDevice:
                 self.handle_message(data)
 
             i += 1
-            if i % 20 == 2 and self.sock is not None and self.is_sender:
-                message = "message" + str(random.randint(100, 999))
-                ret, frame = self.stream.read()
-                print("Frame", ret, frame)
-                        
+            if i % 50 == 2 and self.sock is not None and self.is_sender:
+                frame = self.picam2.capture_array()
+                print("Frame", frame.shape)
+                frame = frame.flatten()
+                buffer = bytes(frame)
 
-                print("Send", message)
-                self.sock.sendto(message.encode(), (self.remote, self.current_port))
+                # buffer = ("message" + str(random.randint(100, 999))).encode()
+                # buffer = bytes([0] * 1000)
+                print("Send data", len(buffer))
+
+
+                self.sock.sendto(buffer, (self.remote, self.current_port))
+
+            
+
 
             # print("data", data)
 
@@ -141,7 +151,7 @@ class SkyHopperDevice:
 
 
 
-inst = SkyHopperDevice(bytes([1,2,3]), is_sender=(sys.argv[1] == "sender"), remote="172.31.70.33")
+inst = SkyHopperDevice(bytes([1,2,3]), is_sender=(sys.argv[1] == "sender"), remote="192.168.50.98")
 # inst.sync_time()
 if inst.is_sender:
     inst.simple_sync_remote()
