@@ -1,4 +1,5 @@
 import os
+import random
 import sys
 import time
 # import cv2
@@ -25,6 +26,8 @@ class SkyHopperDevice:
 
     time_offset: float = 0
 
+    current_port = 0
+
     # 2.4 WiFi
     # 2.4 Bluetooth
     # LoRa
@@ -34,6 +37,7 @@ class SkyHopperDevice:
         self.channel_count = 3
         self.current_freq = 0
         self.interval = 1
+        self.sock = None
 
 
 
@@ -62,7 +66,21 @@ class SkyHopperDevice:
 
         return buf
 
-    
+    def set_socket_port(self, port: int):
+        if self.current_port == port:
+            return
+        
+        print("Change port", port)
+
+        if self.sock is not None:
+            self.sock.close()
+            self.sock = None
+
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.sock.bind(('',port))
+        self.sock.setblocking(False)
+
+        self.current_port = port
 
     def send_message(self, b: bytes):
         buf = bytes(64) 
@@ -72,9 +90,42 @@ class SkyHopperDevice:
 
         pass
 
+    def receive_data(self) -> bytes | None:
+        try:
+            data, address = self.sock.recvfrom(10000)
+            return data
+        except socket.error as ex:
+            # print("Receive error: ", type(ex), ex)
+            return None
 
-# inst = SkyHopperDevice(bytes([1,2,3]))
-# inst.sync_time()
+    def loop(self):
+        
+        i = 0
+        while True:
+            port = self.get_freq_idx() + 4000
+            # print("Freq", port)
+
+            self.set_socket_port(port)
+
+            data = self.receive_data()
+            if data is not None:
+                print("Received", data)
+
+            i += 1
+            if i % 5 == 2 and self.sock is not None and sys.argv[1] == "sender":
+                print("Send")
+                message = "message" + str(random.randint(100, 999))
+                self.sock.sendto(message.encode(), (LOCALHOST, port))
+
+            # print("data", data)
+
+            time.sleep(1)
+
+
+
+inst = SkyHopperDevice(bytes([1,2,3]))
+inst.sync_time()
+inst.loop()
 
 
 # while True:
@@ -85,27 +136,29 @@ class SkyHopperDevice:
 
 
 
-if sys.argv[1] == "recv":
-    print("receiver starting")
 
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.bind(('',8888))
-    sock.setblocking(False)
 
-    while True:
-        try:
-            data, address = sock.recvfrom(10000)
-            print("received:", bytes(data).decode())
-        except socket.error as ex:
-            # print("Receive error: ", type(ex), ex)
-            pass
-        # else: 
-        #     print("recv:", data[0],"times",len(data))
-        time.sleep(1)
-else:
-    print("sending")
+# if sys.argv[1] == "recv":
+#     print("receiver starting")
 
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) 
-    while True:
-        sock.sendto("hallo".encode(), ("127.0.0.1", 8888))
-        time.sleep(1.5)
+#     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+#     sock.bind(('',8888))
+#     sock.setblocking(False)
+
+#     while True:
+#         try:
+#             data, address = sock.recvfrom(10000)
+#             print("received:", bytes(data).decode())
+#         except socket.error as ex:
+#             # print("Receive error: ", type(ex), ex)
+#             pass
+#         # else: 
+#         #     print("recv:", data[0],"times",len(data))
+#         time.sleep(1)
+# else:
+#     print("sending")
+
+#     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) 
+#     while True:
+#         sock.sendto("hallo".encode(), ("127.0.0.1", 8888))
+#         time.sleep(1.5)
