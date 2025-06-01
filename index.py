@@ -14,8 +14,8 @@ import socket
 # cv2.imshow('image',image)
 # cv2.waitKey(0)
 
-LOCALHOST = "127.0.0.1"
-PORTS = [3456, 7689, 10023, 33332]
+# LOCALHOST = "127.0.0.1"
+# PORTS = [3456, 7689, 10023, 33332]
 
 
 class SkyHopperDevice:
@@ -24,7 +24,7 @@ class SkyHopperDevice:
     channel_count: int
     interval: float
 
-    time_offset: float = 0
+    time_offset: float | None = None
 
     current_port = 0
 
@@ -34,13 +34,16 @@ class SkyHopperDevice:
     # 2.4 Bluetooth
     # LoRa
 
-    def __init__(self, key: bytes, is_sender: bool):
+    def __init__(self, key: bytes, is_sender: bool, remote: str):
         self.key = key
         self.channel_count = 1000
         self.current_freq = 0
         self.interval = 1
         self.sock = None
         self.is_sender = is_sender
+        self.remote = remote
+        # self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.update_current_port()
 
     def get_freq_idx(self):
         frame_idx = self.get_time() // self.interval
@@ -51,36 +54,36 @@ class SkyHopperDevice:
         self.time_offset = time.time()
 
     def get_time(self):
+        if self.time_offset is None:
+            return 0
         return time.time() - self.time_offset
 
-    def _update_freq(self):
-        freq_idx = self.get_freq_idx()
-        self.current_freq = freq_idx
-        freq =  ["WiFi", "Bt", "LoRa"][freq_idx]
+    # def _update_freq(self):
+    #     freq_idx = self.get_freq_idx()
+    #     self.current_freq = freq_idx
+        # freq =  ["WiFi", "Bt", "LoRa"][freq_idx]
 
-        print(int(self.get_time()), ": Channel updated:", freq)
-        # TODO: update the receiver/transmitter frequency
+        # print(int(self.get_time()), ": Channel updated:", freq)
 
-    def receive_message(self) -> bytes:
-        buf = bytes(64) # TODO: receive payload from the receiver/transmitter
+    # def receive_message(self) -> bytes:
+    #     buf = bytes(64) # TODO: receive payload from the receiver/transmitter
 
-        return buf
+    #     return buf
 
     def set_socket_port(self, port: int):
         if self.current_port == port:
             return
         
         print("Change port", port)
-
         
         if self.sock is not None:
             self.sock.close()
             self.sock = None
 
+        # if not self.is_sender:
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        if not self.is_sender:
-            self.sock.bind(('',port))
-            self.sock.setblocking(False)
+        self.sock.bind(('',port))
+        self.sock.setblocking(False)
 
         self.current_port = port
 
@@ -93,27 +96,37 @@ class SkyHopperDevice:
             return None
         
     def handle_message(self, message: bytes):
-        print("Received", message)
+        if message[0] == 99:
+            print("Sync time")
+            self.sync_time()
+        else:
+            print("Received unknown message", message)
+
+    def simple_sync_remote(self):
+        self.sock.sendto(bytes([99]), (self.remote, self.current_port))
+        self.sync_time()
+
+    def update_current_port(self):
+        port = self.get_freq_idx() + 4000
+        # print("Freq", port)
+        self.set_socket_port(port)
 
     def loop(self):
         
         i = 0
         while True:
-            port = self.get_freq_idx() + 4000
-            # print("Freq", port)
-
-            self.set_socket_port(port)
-
-            if not self.is_sender:
-                data = self.receive_data()
-                if data is not None:
-                    self.handle_message(data)
+            self.update_current_port()
+            
+            # if not self.is_sender:
+            data = self.receive_data()
+            if data is not None:
+                self.handle_message(data)
 
             i += 1
             if i % 20 == 2 and self.sock is not None and self.is_sender:
-                print("Send")
                 message = "message" + str(random.randint(100, 999))
-                self.sock.sendto(message.encode(), (LOCALHOST, port))
+                print("Send", message)
+                self.sock.sendto(message.encode(), (self.remote, self.current_port))
 
             # print("data", data)
 
@@ -121,8 +134,9 @@ class SkyHopperDevice:
 
 
 
-inst = SkyHopperDevice(bytes([1,2,3]), is_sender=(sys.argv[1] == "sender"))
-inst.sync_time()
+inst = SkyHopperDevice(bytes([1,2,3]), is_sender=(sys.argv[1] == "sender"), remote="192.168.50.243")
+# inst.sync_time()
+inst.simple_sync_remote()
 inst.loop()
 
 
